@@ -46,19 +46,19 @@ type ValueObject = {
 };
 
 class MathOperatorHelper {
-    static throwIfNotNumber(value: number | string) {
+    static throwIfNotNumber(value: number | string | ValueObject) {
         const valueType = typeof value;
-        if (valueType === 'string') {
-            throw new Error('Strings are not allowed in math operations');
+        if (valueType !== 'number') {
+            throw new Error('Non-numbers are not allowed in math operations');
         }
     }
 }
 
 class MathFunctionHelper {
-    static throwIfNotNumber(value: number | string) {
+    static throwIfNotNumber(value: number | string | ValueObject) {
         const valueType = typeof value;
-        if (valueType === 'string') {
-            throw new Error('Strings are not allowed in math operations');
+        if (valueType !== 'number') {
+            throw new Error('Non-numbers are not allowed in math operations');
         }
     }
 }
@@ -80,7 +80,7 @@ class Expression {
         throw new Error(`Unknown operator: ${operator}`);
     }
 
-    evaluate(params: ValueObject = {}): number | string {
+    evaluate(params: ValueObject = {}): number | string | ValueObject {
         throw new Error('Empty Expression - Must be defined in child classes');
     }
 
@@ -99,7 +99,7 @@ class BracketExpression extends Expression {
             throw new Error('No inner expression given for bracket expression');
         }
     }
-    evaluate(params = {}): number | string {
+    evaluate(params = {}): number | string | ValueObject {
         return this.innerExpression.evaluate(params);
     }
     toString() {
@@ -129,7 +129,7 @@ class ValueExpression extends Expression {
         }
         this.type = type;
     }
-    evaluate(): number | string {
+    evaluate(): number | string | ValueObject {
         return this.value;
     }
     toString() {
@@ -159,11 +159,15 @@ class PlusMinusExpression extends Expression {
         this.right = right;
     }
 
-    evaluate(params: ValueObject = {}): number {
+    evaluate(params: ValueObject = {}): number | string | ValueObject {
         const leftValue = this.left.evaluate(params);
         const rightValue = this.right.evaluate(params);
         MathOperatorHelper.throwIfNotNumber(leftValue);
         MathOperatorHelper.throwIfNotNumber(rightValue);
+        // TODO: check if leftValue and rightValue can be completely converted to numbers then process as numbers
+        // TODO: if not, process as strings
+        // TODO: possibly add support for treating numbers in quotes as strings
+        // TODO: for objects do sum of all props (though it's not needed ATM)
         if (this.operator === '+') {
             return Number(leftValue) + Number(rightValue);
         }
@@ -251,7 +255,7 @@ class LogicalExpression extends Expression {
         this.right = right;
     }
 
-    evaluate(params: ValueObject = {}): number {
+    evaluate(params: ValueObject = {}): number | string | ValueObject {
         const leftValue = this.left.evaluate(params);
         const rightValue = this.right.evaluate(params);
         switch ( this.operator ) {
@@ -263,6 +267,7 @@ class LogicalExpression extends Expression {
                 return leftValue <= rightValue ? 1 : 0;
             case '>=':
                 return leftValue >= rightValue ? 1 : 0;
+            // TODO: check object equality by all props
             case '=':
                 return leftValue === rightValue ? 1 : 0;
             case '!=':
@@ -291,7 +296,7 @@ class FunctionExpression extends Expression {
         this.blacklisted = undefined;
     }
 
-    evaluate(params: ValueObject = {}): number | string {
+    evaluate(params: ValueObject = {}): number | string | ValueObject {
         params = params || {};
         const paramValues = this.argumentExpressions.map((a) => a.evaluate(params));
 
@@ -369,9 +374,9 @@ function getProperty(object: ValueObject, path: string[], fullPath: string) {
         curr = curr[propName];
     }
 
-    if (typeof curr === 'object') {
-        throw new Error('Invalid value');
-    }
+    // if (typeof curr === 'object') {
+    //     throw new Error('Invalid value');
+    // }
 
     return curr;
 }
@@ -388,7 +393,7 @@ class VariableExpression extends Expression {
         this.varPath = fullPath.split('.');
     }
 
-    evaluate(params = {}): number | string {
+    evaluate(params = {}): number | string | ValueObject {
         // params contain variable / value pairs: If this object's variable matches
         // a varname found in the params, return the value.
         // eg: params = {x: 5,y:3}, varname = x, return 5
@@ -409,8 +414,8 @@ class VariableExpression extends Expression {
             // This will throw an error if the property is not found:
             value = getProperty(this.formulaObject ?? {}, this.varPath, this.fullPath);
         }
-        if (typeof value === 'function' || typeof value === 'object') {
-            throw new Error(`Cannot use ${this.fullPath} as value: It contains a non-numerical value.`);
+        if (typeof value === 'function') { //  || typeof value === 'object'
+            throw new Error(`Cannot use ${this.fullPath} as value: It contains a function.`);
         }
 
         return value;
